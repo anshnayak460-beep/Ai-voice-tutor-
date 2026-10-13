@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Voice Tutor</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #101322;
+  color: white;
+}
+
+header {
+  padding: 22px 15px;
+  text-align: center;
+  background: #191e35;
+  border-bottom: 1px solid #303854;
+}
+
+header h1 {
+  margin: 0;
+  color: #78a7ff;
+  font-size: 26px;
+}
+
+header p {
+  color: #c1c9df;
+  font-size: 14px;
+}
+
+.container {
+  max-width: 650px;
+  margin: auto;
+  padding: 18px;
+}
+
+.card {
+  background: #191e35;
+  border: 1px solid #303854;
+  padding: 20px;
+  border-radius: 18px;
+  margin-bottom: 18px;
+}
+
+h2 {
+  font-size: 19px;
+  margin-top: 0;
+}
+
+select, textarea, input, button {
+  width: 100%;
+  padding: 13px;
+  border-radius: 10px;
+  border: 1px solid #39435f;
+  font-size: 16px;
+}
+
+select, textarea, input {
+  background: #101629;
+  color: white;
+  margin: 8px 0 14px;
+}
+
+textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+button {
+  background: #477cff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  margin: 5px 0;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: #303854;
+}
+
+button.mic {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: block;
+  margin: 20px auto;
+  font-size: 38px;
+  background: #477cff;
+  box-shadow: 0 0 30px #477cff55;
+}
+
+button.mic.listening {
+  background: #e74c6c;
+}
+
+#status {
+  text-align: center;
+  color: #9fbcff;
+  min-height: 24px;
+}
+
+#answer {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: #f0f3ff;
+  overflow-wrap: anywhere;
+}
+
+.small {
+  color: #aeb8d3;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+footer {
+  text-align: center;
+  padding: 20px;
+  color: #aeb8d3;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>🎙️ AI Voice Tutor</h1>
+  <p>Apna AI teacher — poocho, samjho aur seekho!</p>
+</header>
+
+<main class="container">
+
+  <section class="card">
+    <h2>📚 Apna subject chuno</h2>
+
+    <select id="subject">
+      <option value="General Learning">General Learning</option>
+      <option value="Class 10 Maths">Class 10 Maths</option>
+      <option value="Science">Science</option>
+      <option value="English">English</option>
+      <option value="General Knowledge">General Knowledge</option>
+      <option value="NDA Preparation">NDA Preparation</option>
+    </select>
+
+    <label for="language">Jawab ki bhasha</label>
+    <select id="language">
+      <option value="Hindi">Hindi</option>
+      <option value="English">English</option>
+      <option value="Hinglish">Hinglish</option>
+    </select>
+  </section>
+
+  <section class="card">
+    <h2>🎤 Bolkar sawal poocho</h2>
+
+    <p class="small">
+      Microphone button dabao aur apna sawal saaf-saaf bolo.
+    </p>
+
+    <button class="mic" id="micButton"
+      aria-label="Sawal bolne ke liye microphone chalu karein">
+      🎙️
+    </button>
+
+    <p id="status" role="status" aria-live="polite">
+      Tutor se baat karne ke liye taiyar!
+    </p>
+
+    <label for="question">Ya apna sawal likho</label>
+
+    <textarea id="question"
+      placeholder="Jaise: Photosynthesis kya hota hai?"></textarea>
+
+    <button id="askButton">🤖 AI se jawab lo</button>
+  </section>
+
+  <section class="card">
+    <h2>💡 Tutor ka jawab</h2>
+
+    <div id="answer" aria-live="polite">
+      Tumhara jawab yahan dikhai dega.
+    </div>
+
+    <button id="speakButton" class="secondary">
+      🔊 Jawab suno
+    </button>
+
+    <button id="stopButton" class="secondary">
+      ⏹️ Awaaz band karo
+    </button>
+  </section>
+
+  <section class="card">
+    <h2>⚙️ Backend Connection</h2>
+
+    <label for="backendUrl">Apne backend ka URL</label>
+
+    <input id="backendUrl"
+      type="url"
+      placeholder="https://your-app.example.com">
+
+    <button id="saveButton" class="secondary">
+      Backend URL save karo
+    </button>
+
+    <p class="small">
+      Yahan backend par deploy kiye gaye server ka HTTPS URL dalo.
+      API key yahan kabhi mat dalo.
+    </p>
+  </section>
+
+</main>
+
+<footer>
+  AI Voice Tutor · Learn Something New Every Day
+</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let recognition = null;
+let lastAnswer = "";
+let listening = false;
+
+const savedUrl = localStorage.getItem("voiceTutorBackend");
+
+if (savedUrl) {
+  $("backendUrl").value = savedUrl;
+}
+
+$("saveButton").addEventListener("click", () => {
+  const value = $("backendUrl").value.trim();
+
+  try {
+    const url = new URL(value);
+
+    if (url.protocol !== "https:") {
+      throw new Error("HTTPS zaroori hai");
+    }
+
+    localStorage.setItem("voiceTutorBackend", url.origin);
+    $("status").textContent = "Backend URL save ho gaya!";
+  } catch {
+    $("status").textContent =
+      "Sahi HTTPS backend URL dalo.";
+  }
+});
+
+function getBackendUrl() {
+  const value = $("backendUrl").value.trim();
+
+  if (!value) {
+    throw new Error("Pehle backend URL save karo.");
+  }
+
+  const url = new URL(value);
+
+  if (url.protocol !== "https:") {
+    throw new Error("Backend URL HTTPS hona chahiye.");
+  }
+
+  return url.origin;
+}
+
+// Browser speech recognition
+const SpeechRecognition =
+  window.SpeechRecognition ||
+  window.webkitSpeechRecognition;
+
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.lang = "hi-IN";
+  recognition.interimResults = true;
+  recognition.continuous = false;
+
+  recognition.onstart = () => {
+    listening = true;
+    $("micButton").classList.add("listening");
+    $("status").textContent = "🎧 Sun raha hoon...";
+  };
+
+  recognition.onresult = event => {
+    let text = "";
+
+    for (let i = event.resultIndex;
+         i < event.results.length; i++) {
+      text += event.results[i][0].transcript;
+    }
+
+    $("question").value = text;
+  };
+
+  recognition.onerror = event => {
+    $("status").textContent =
+      "Microphone error: " + event.error +
+      ". Permission aur internet check karo.";
+  };
+
+  recognition.onend = () => {
+    listening = false;
+    $("micButton").classList.remove("listening");
+    if ($("status").textContent === "🎧 Sun raha hoon...") {
+      $("status").textContent = "Ab AI se jawab le sakte ho.";
+    }
+  };
+} else {
+  $("status").textContent =
+    "Is browser mein voice recognition supported nahi hai. Sawal type karo.";
+}
+
+$("micButton").addEventListener("click", () => {
+  if (!recognition) {
+    $("status").textContent =
+      "Voice input supported nahi hai. Chrome mein try karo.";
+    return;
+  }
+
+  if (listening) {
+    recognition.stop();
+    return;
+  }
+
+  recognition.lang =
+    $("language").value === "English"
+      ? "en-IN"
+      : "hi-IN";
+
+  try {
+    recognition.start();
+  } catch {
+    $("status").textContent =
+      "Microphone dobara shuru karne se pehle thoda ruko.";
+  }
+});
+
+// AI request
+$("askButton").addEventListener("click", async () => {
+  const question = $("question").value.trim();
+
+  if (!question) {
+    $("status").textContent = "Pehle apna sawal bolo ya likho.";
+    return;
+  }
+
+  $("askButton").disabled = true;
+  $("answer").textContent = "";
+  $("status").textContent = "🤖 AI jawab taiyar kar raha hai...";
+
+  try {
+    const backend = getBackendUrl();
+
+    const response = await fetch(backend + "/api/ask", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        question,
+        subject: $("subject").value,
+        language: $("language").value
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "AI request fail ho gayi.");
+    }
+
+    lastAnswer = data.answer || "";
+    $("answer").textContent = lastAnswer;
+    $("status").textContent = "✅ Jawab taiyar hai!";
+
+    speakAnswer();
+  } catch (error) {
+    $("status").textContent = "❌ " + error.message;
+  } finally {
+    $("askButton").disabled = false;
+  }
+});
+
+// Browser text-to-speech
+function speakAnswer() {
+  if (!lastAnswer) {
+    $("status").textContent = "Pehle AI ka jawab lo.";
+    return;
+  }
+
+  if (!("speechSynthesis" in window)) {
+    $("status").textContent =
+      "Is browser mein voice output supported nahi hai.";
+    return;
+  }
+
+  speechSynthesis.cancel();
+
+  const utterance = new SpeechSynthesisUtterance(lastAnswer);
+
+  const lang = $("language").value;
+
+  utterance.lang =
+    lang === "English" ? "en-IN" : "hi-IN";
+
+  utterance.rate = 0.95;
+  utterance.pitch = 1;
+
+  utterance.onstart = () => {
+    $("status").textContent = "🔊 Jawab suna raha hoon...";
+  };
+
+  utterance.onend = () => {
+    $("status").textContent = "Jawab poora ho gaya.";
+  };
+
+  speechSynthesis.speak(utterance);
+}
+
+$("speakButton").addEventListener("click", speakAnswer);
+
+$("stopButton").addEventListener("click", () => {
+  if ("speechSynthesis" in window) {
+    speechSynthesis.cancel();
+  }
+
+  if (recognition && listening) {
+    recognition.stop();
+  }
+
+  $("status").textContent = "Awaaz band kar di gayi.";
+});
+</script>
+
+</body>
+  </html>
